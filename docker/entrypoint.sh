@@ -60,9 +60,15 @@ fi
 
 # Ensure the main config file remains accessible to the hermes runtime user
 # even if it was edited on the host after initial ownership setup.
+# chown wrapped to tolerate EPERM: on strict Linux (Debian 13 with
+# _POSIX_CHOWN_RESTRICTED) a non-root user can't chown — even to itself —
+# without CAP_CHOWN. When this script is re-invoked under gosu after the
+# root branch above has already chown -R'd /opt/data, this becomes a
+# defense-in-depth step that's a no-op on the happy path.
 if [ -f "$HERMES_HOME/config.yaml" ]; then
-    chown hermes:hermes "$HERMES_HOME/config.yaml"
-    chmod 640 "$HERMES_HOME/config.yaml"
+    chown hermes:hermes "$HERMES_HOME/config.yaml" 2>/dev/null || \
+        echo "Note: chown config.yaml skipped (non-root) — relying on init-time chown"
+    chmod 640 "$HERMES_HOME/config.yaml" 2>/dev/null || true
 fi
 
 # SOUL.md
