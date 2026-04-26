@@ -82,4 +82,14 @@ VOLUME [ "/opt/data" ]
 COPY --from=helix_source /opt/helix /opt/helix
 ENV HELIX_RUNTIME=/opt/helix/runtime
 ENV EDITOR=/opt/helix/hx
+# LLM CLI subagents — Hermes can shell out to these as delegated agents
+# using their own subscription auth. Installed late so this layer doesn't
+# invalidate the heavier npm/uv/helix cache above.
+USER root
+RUN npm install -g --silent \
+        @anthropic-ai/claude-code \
+        @openai/codex \
+        @google/gemini-cli \
+ && npm cache clean --force
+USER hermes
 ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
