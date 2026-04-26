@@ -91,5 +91,33 @@ RUN npm install -g --silent \
         @openai/codex \
         @google/gemini-cli \
  && npm cache clean --force
+
+# Subprocess-friendly env so subagents work when Hermes shells out:
+#   - HOME pin so Python/Node subprocesses with cleaned env still find the
+#     hermes user's home. Both claude-code and codex default to
+#     $HOME/.claude and $HOME/.codey respectively, so HOME alone is enough.
+#   - GEMINI_CLI_TRUST_WORKSPACE=true so gemini doesn't refuse to run from
+#     non-git CWDs (the agent's terminal tool typically cd's to a sandbox).
+ENV HOME=/opt/data
+ENV GEMINI_CLI_TRUST_WORKSPACE=true
+
+# Codex requires a flag, not an env var, to bypass the trust check. The
+# flag is subcommand-scoped (`codex exec --skip-git-repo-check ...`),
+# not global, so a naive `exec real-codex --skip-git-repo-check "$@"`
+# wrapper puts the flag in the wrong position. Insert it AFTER the
+# subcommand for `exec` (the only command Hermes invokes from a tool
+# call); pass other subcommands through unchanged.
+RUN mkdir -p /opt/hermes-bin \
+ && cat > /opt/hermes-bin/codex <<'WRAP' \
+ && chmod +x /opt/hermes-bin/codex
+#!/bin/sh
+if [ "${1:-}" = "exec" ]; then
+  shift
+  exec /usr/local/bin/codex exec --skip-git-repo-check "$@"
+fi
+exec /usr/local/bin/codex "$@"
+WRAP
+ENV PATH="/opt/hermes-bin:/opt/helix:/opt/data/.local/bin:${PATH}"
+
 USER hermes
 ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
