@@ -85,6 +85,9 @@ ENV EDITOR=/opt/helix/hx
 # LLM CLI subagents — Hermes can shell out to these as delegated agents
 # using their own subscription auth. Installed late so this layer doesn't
 # invalidate the heavier npm/uv/helix cache above.
+# USER root so npm install -g can write to /usr/local/lib/node_modules.
+# Container will stay as root after this layer (no trailing USER hermes
+# below) so the upstream entrypoint can do its uid migration + gosu drop.
 USER root
 RUN npm install -g --silent \
         @anthropic-ai/claude-code \
@@ -119,5 +122,9 @@ exec /usr/local/bin/codex "$@"
 WRAP
 ENV PATH="/opt/hermes-bin:/opt/helix:/opt/data/.local/bin:${PATH}"
 
-USER hermes
+# Container intentionally starts as root so the upstream entrypoint can
+# usermod the in-image hermes user to HERMES_UID, chown /opt/data, and
+# gosu-drop to the configured agent identity. Setting `USER hermes` here
+# would cause the entrypoint's `if [ "$(id -u)" = "0" ]` block to skip,
+# leaving uid migration broken on every pod start.
 ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
